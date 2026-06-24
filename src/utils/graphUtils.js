@@ -6,7 +6,7 @@ function buildAdjacencyList(edges) {
   const adjacencyList = new Map();
   const nodes = new Set();
   const seenRaw = new Set();
-  const seenParsed = new Set();
+  const childHasParent = new Map();
   const duplicate_edges = [];
   const dedupedEdges = [];
 
@@ -16,18 +16,19 @@ function buildAdjacencyList(edges) {
     
     // Store duplicates based on raw string
     if (seenRaw.has(edge.raw)) {
-      duplicate_edges.push(edge.raw);
+      if (!duplicate_edges.includes(edge.raw)) {
+        duplicate_edges.push(edge.raw);
+      }
       continue;
     }
     seenRaw.add(edge.raw);
     
-    // Some edges might be duplicate in meaning but not raw string (e.g. " A->B " vs "A->B").
-    // We deduplicate parsed pairs as well just in case.
-    const key = `${from}->${to}`;
-    if (seenParsed.has(key)) {
+    // Diamond / multi-parent rule
+    if (childHasParent.has(to) && childHasParent.get(to) !== from) {
       continue;
     }
-    seenParsed.add(key);
+    childHasParent.set(to, from);
+
     dedupedEdges.push([from, to]);
 
     nodes.add(from);
@@ -213,6 +214,10 @@ function buildHierarchies(componentRoots, adjacencyList, components, componentCy
       if (depth > maxDepthOverall) {
         maxDepthOverall = depth;
         largestTreeRoot = root;
+      } else if (depth === maxDepthOverall && largestTreeRoot !== null) {
+        if (root < largestTreeRoot) {
+          largestTreeRoot = root;
+        }
       }
     }
   }

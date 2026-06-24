@@ -24,17 +24,23 @@ const process = async (req, res, next) => {
     const invalid_entries = [];
     const validEdges = [];
     
-    // Regex: Node names must be alphabets (at least one letter on each side of ->)
-    const edgeRegex = /^([a-zA-Z]+)->([a-zA-Z]+)$/;
+    // Regex: Node names must be a single uppercase letter (A-Z)
+    const edgeRegex = /^([A-Z])->([A-Z])$/;
     
     data.forEach(entry => {
-      const match = entry.match(edgeRegex);
+      // Trim whitespace first, then validate
+      const trimmed = typeof entry === 'string' ? entry.trim() : entry;
+      const match = typeof trimmed === 'string' ? trimmed.match(edgeRegex) : null;
       if (!match) {
         invalid_entries.push(entry);
       } else {
         const from = match[1];
         const to = match[2];
-        validEdges.push({ raw: entry, parsed: [from, to] });
+        if (from === to) {
+          invalid_entries.push(entry);
+        } else {
+          validEdges.push({ raw: trimmed, parsed: [from, to] });
+        }
       }
     });
 

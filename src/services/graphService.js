@@ -32,9 +32,9 @@ function processGraph(validEdges, invalid_entries) {
   const summary = generateSummary(totalTrees, totalCycles, largestTreeRoot);
 
   return {
-    user_id: "johndoe_17091999",
-    email_id: "john.doe@college.edu",
-    college_roll_number: "21CS1001",
+    user_id: "namankumar_12122004",
+    email_id: "naman1910.be23@chitkara.edu.in",
+    college_roll_number: "2310991910",
     hierarchies,
     invalid_entries,
     duplicate_edges,
