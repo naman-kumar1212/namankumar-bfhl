@@ -1,37 +1,33 @@
 /**
- * Graph utility functions — pure, stateless, fully tested.
- *
- * Algorithms:
- *  1. buildAdjacencyList  — deduplicate edges, build directed adjacency map
- *  2. detectCycles        — DFS 3-colour cycle detection
- *  3. findConnectedComponents — Union-Find on undirected view
- *  4. identifyRoots       — in-degree 0 nodes; fallback for pure cycles
- *  5. buildTrees          — BFS from each root to produce nested tree JSON
- *  6. calculateDepth      — max depth of each tree
- *  7. generateSummary     — human-readable summary string
+ * Graph utility functions for BFHL Challenge.
  */
 
-// ═══════════════════════════════════════════════════════
-// 1. BUILD ADJACENCY LIST (with deduplication)
-// ═══════════════════════════════════════════════════════
-
-/**
- * Builds a directed adjacency list from an array of edges.
- * Duplicate edges are silently removed.
- *
- * @param {string[][]} edges - Array of [from, to] pairs
- * @returns {{ adjacencyList: Map<string, string[]>, nodes: Set<string>, dedupedEdges: string[][] }}
- */
 function buildAdjacencyList(edges) {
   const adjacencyList = new Map();
   const nodes = new Set();
-  const seen = new Set(); // for deduplication
+  const seenRaw = new Set();
+  const seenParsed = new Set();
+  const duplicate_edges = [];
   const dedupedEdges = [];
 
-  for (const [from, to] of edges) {
+  for (const edge of edges) {
+    const from = edge.parsed[0];
+    const to = edge.parsed[1];
+    
+    // Store duplicates based on raw string
+    if (seenRaw.has(edge.raw)) {
+      duplicate_edges.push(edge.raw);
+      continue;
+    }
+    seenRaw.add(edge.raw);
+    
+    // Some edges might be duplicate in meaning but not raw string (e.g. " A->B " vs "A->B").
+    // We deduplicate parsed pairs as well just in case.
     const key = `${from}->${to}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (seenParsed.has(key)) {
+      continue;
+    }
+    seenParsed.add(key);
     dedupedEdges.push([from, to]);
 
     nodes.add(from);
@@ -40,80 +36,16 @@ function buildAdjacencyList(edges) {
     if (!adjacencyList.has(from)) adjacencyList.set(from, []);
     adjacencyList.get(from).push(to);
 
-    // Ensure 'to' node exists in the map even if it has no children
     if (!adjacencyList.has(to)) adjacencyList.set(to, []);
   }
 
-  return { adjacencyList, nodes, dedupedEdges };
+  return { adjacencyList, nodes, dedupedEdges, duplicate_edges };
 }
 
-// ═══════════════════════════════════════════════════════
-// 2. DETECT CYCLES (DFS 3-colour)
-// ═══════════════════════════════════════════════════════
-
-/**
- * Detects cycles in a directed graph using DFS with 3-colour marking.
- *  WHITE (0) = unvisited
- *  GRAY  (1) = in current DFS stack (visiting)
- *  BLACK (2) = fully processed
- *
- * A back-edge (to a GRAY node) indicates a cycle.
- *
- * @param {Map<string, string[]>} adjacencyList
- * @param {Set<string>} nodes
- * @returns {{ hasCycle: boolean, cycleEdges: string[][] }}
- */
-function detectCycles(adjacencyList, nodes) {
-  const WHITE = 0, GRAY = 1, BLACK = 2;
-  const colour = new Map();
-  const cycleEdges = [];
-  let hasCycle = false;
-
-  for (const node of nodes) {
-    colour.set(node, WHITE);
-  }
-
-  function dfs(u) {
-    colour.set(u, GRAY);
-    const neighbours = adjacencyList.get(u) || [];
-    for (const v of neighbours) {
-      if (colour.get(v) === GRAY) {
-        // Back edge → cycle detected
-        hasCycle = true;
-        cycleEdges.push([u, v]);
-      } else if (colour.get(v) === WHITE) {
-        dfs(v);
-      }
-    }
-    colour.set(u, BLACK);
-  }
-
-  for (const node of nodes) {
-    if (colour.get(node) === WHITE) {
-      dfs(node);
-    }
-  }
-
-  return { hasCycle, cycleEdges };
-}
-
-// ═══════════════════════════════════════════════════════
-// 3. FIND CONNECTED COMPONENTS (Union-Find)
-// ═══════════════════════════════════════════════════════
-
-/**
- * Groups nodes into connected components using Union-Find.
- * Treats the graph as UNDIRECTED for connectivity.
- *
- * @param {string[][]} edges - Deduplicated edges
- * @param {Set<string>} nodes
- * @returns {string[][]} Array of components, each an array of node names (sorted)
- */
 function findConnectedComponents(edges, nodes) {
   const parent = new Map();
   const rank = new Map();
 
-  // Initialise each node as its own parent
   for (const node of nodes) {
     parent.set(node, node);
     rank.set(node, 0);
@@ -121,7 +53,7 @@ function findConnectedComponents(edges, nodes) {
 
   function find(x) {
     if (parent.get(x) !== x) {
-      parent.set(x, find(parent.get(x))); // path compression
+      parent.set(x, find(parent.get(x)));
     }
     return parent.get(x);
   }
@@ -130,7 +62,6 @@ function findConnectedComponents(edges, nodes) {
     const rootA = find(a);
     const rootB = find(b);
     if (rootA === rootB) return;
-    // Union by rank
     if (rank.get(rootA) < rank.get(rootB)) {
       parent.set(rootA, rootB);
     } else if (rank.get(rootA) > rank.get(rootB)) {
@@ -141,12 +72,10 @@ function findConnectedComponents(edges, nodes) {
     }
   }
 
-  // Union all edges (undirected)
   for (const [from, to] of edges) {
     union(from, to);
   }
 
-  // Group by root
   const groups = new Map();
   for (const node of nodes) {
     const root = find(node);
@@ -154,36 +83,52 @@ function findConnectedComponents(edges, nodes) {
     groups.get(root).push(node);
   }
 
-  // Sort nodes within each component and return
   const components = [];
   for (const members of groups.values()) {
     components.push(members.sort());
   }
 
-  // Sort components by their first element for deterministic output
   components.sort((a, b) => a[0].localeCompare(b[0]));
-
   return components;
 }
 
-// ═══════════════════════════════════════════════════════
-// 4. IDENTIFY ROOTS
-// ═══════════════════════════════════════════════════════
+function detectCyclesPerComponent(adjacencyList, components) {
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const colour = new Map();
+  const componentCycles = new Map();
+  let totalCycles = 0;
 
-/**
- * Identifies root nodes for each connected component.
- *
- * Rules:
- *  - A root is a node with in-degree 0 within its component.
- *  - If NO node has in-degree 0 (pure cycle), pick the
- *    lexicographically smallest node as the root.
- *
- * @param {Map<string, string[]>} adjacencyList
- * @param {string[][]} components
- * @returns {Map<string, string[]>} componentIndex → root nodes
- */
+  components.forEach((comp, index) => {
+    comp.forEach(node => colour.set(node, WHITE));
+    let hasCycle = false;
+
+    function dfs(u) {
+      colour.set(u, GRAY);
+      const neighbours = adjacencyList.get(u) || [];
+      for (const v of neighbours) {
+        if (colour.get(v) === GRAY) {
+          hasCycle = true;
+        } else if (colour.get(v) === WHITE) {
+          dfs(v);
+        }
+      }
+      colour.set(u, BLACK);
+    }
+
+    comp.forEach(node => {
+      if (colour.get(node) === WHITE) {
+        dfs(node);
+      }
+    });
+
+    componentCycles.set(index, hasCycle);
+    if (hasCycle) totalCycles++;
+  });
+
+  return { componentCycles, totalCycles };
+}
+
 function identifyRoots(adjacencyList, components) {
-  // Calculate in-degree for all nodes
   const inDegree = new Map();
   for (const [, neighbours] of adjacencyList) {
     for (const neighbour of neighbours) {
@@ -199,10 +144,8 @@ function identifyRoots(adjacencyList, components) {
     );
 
     if (roots.length > 0) {
-      // Sort for deterministic order
       componentRoots.set(index, roots.sort());
     } else {
-      // Pure cycle — pick lexicographically smallest
       const sorted = [...component].sort();
       componentRoots.set(index, [sorted[0]]);
     }
@@ -211,138 +154,85 @@ function identifyRoots(adjacencyList, components) {
   return componentRoots;
 }
 
-// ═══════════════════════════════════════════════════════
-// 5. BUILD TREES (BFS from each root)
-// ═══════════════════════════════════════════════════════
-
-/**
- * Builds a nested tree structure via BFS from a given root.
- * Handles diamond cases (multi-parent): a node appears under the
- * FIRST parent that reaches it, with a note for subsequent parents.
- *
- * For cycles: if we encounter an already-visited node, we mark it
- * as a cycle-back-reference instead of recursing.
- *
- * @param {string} root
- * @param {Map<string, string[]>} adjacencyList
- * @returns {{ tree: object, depth: number }}
- */
 function buildTree(root, adjacencyList) {
   const visited = new Set();
   let maxDepth = 0;
 
   function dfs(node, depth) {
     if (visited.has(node)) {
-      return { name: node, cycleBackRef: true };
+      return {}; 
     }
 
     visited.add(node);
     if (depth > maxDepth) maxDepth = depth;
 
     const neighbours = adjacencyList.get(node) || [];
-    const children = [];
+    const treeNode = {};
 
-    for (const child of neighbours) {
-      children.push(dfs(child, depth + 1));
-    }
+    const sortedNeighbours = [...neighbours].sort();
 
-    const treeNode = { name: node };
-    if (children.length > 0) {
-      treeNode.children = children;
+    for (const child of sortedNeighbours) {
+      treeNode[child] = dfs(child, depth + 1);
     }
 
     return treeNode;
   }
 
-  const tree = dfs(root, 0);
-  return { tree, depth: maxDepth };
+  const rootTree = {};
+  rootTree[root] = dfs(root, 1);
+  
+  return { tree: rootTree, depth: maxDepth };
 }
 
-/**
- * Builds trees for ALL roots across all components.
- *
- * @param {Map<string, string[]>} componentRoots - index → root nodes
- * @param {Map<string, string[]>} adjacencyList
- * @param {string[][]} components
- * @returns {object[]} Array of { componentIndex, root, tree, depth }
- */
-function buildTrees(componentRoots, adjacencyList, components) {
-  const results = [];
+function buildHierarchies(componentRoots, adjacencyList, components, componentCycles) {
+  const hierarchies = [];
+  let totalTrees = 0;
+  let largestTreeRoot = null;
+  let maxDepthOverall = 0;
 
   for (const [compIndex, roots] of componentRoots) {
+    if (componentCycles.get(compIndex)) {
+      // Has cycle
+      hierarchies.push({
+        root: roots[0],
+        tree: {},
+        has_cycle: true
+      });
+      continue;
+    }
+
     for (const root of roots) {
       const { tree, depth } = buildTree(root, adjacencyList);
-      results.push({
-        componentIndex: compIndex,
-        componentNodes: components[compIndex],
+      hierarchies.push({
         root,
         tree,
-        depth,
+        depth
       });
+      totalTrees++;
+
+      if (depth > maxDepthOverall) {
+        maxDepthOverall = depth;
+        largestTreeRoot = root;
+      }
     }
   }
 
-  return results;
+  return { hierarchies, totalTrees, largestTreeRoot };
 }
 
-// ═══════════════════════════════════════════════════════
-// 6. CALCULATE DEPTH (convenience — already computed in buildTree)
-// ═══════════════════════════════════════════════════════
-
-/**
- * Extracts a depth map from built trees.
- *
- * @param {object[]} trees - Output of buildTrees()
- * @returns {object[]} Array of { root, depth }
- */
-function calculateDepth(trees) {
-  return trees.map(({ root, depth }) => ({ root, depth }));
+function generateSummary(totalTrees, totalCycles, largestTreeRoot) {
+  return {
+    total_trees: totalTrees,
+    total_cycles: totalCycles,
+    largest_tree_root: largestTreeRoot
+  };
 }
-
-// ═══════════════════════════════════════════════════════
-// 7. GENERATE SUMMARY
-// ═══════════════════════════════════════════════════════
-
-/**
- * Produces a human-readable summary of the graph analysis.
- *
- * @param {object} data - { components, trees, cycleInfo }
- * @returns {string}
- */
-function generateSummary({ components, trees, cycleInfo, totalNodes, totalEdges }) {
-  const lines = [];
-
-  lines.push(`Graph Analysis Summary`);
-  lines.push(`======================`);
-  lines.push(`Total nodes: ${totalNodes}`);
-  lines.push(`Total unique edges: ${totalEdges}`);
-  lines.push(`Connected components: ${components.length}`);
-  lines.push(`Cycles detected: ${cycleInfo.hasCycle ? 'Yes' : 'No'}`);
-
-  if (cycleInfo.hasCycle) {
-    lines.push(`Cycle edges: ${cycleInfo.cycleEdges.map(([a, b]) => `${a} → ${b}`).join(', ')}`);
-  }
-
-  lines.push('');
-
-  trees.forEach(({ root, depth, componentNodes }, i) => {
-    lines.push(`Tree ${i + 1}: root="${root}", depth=${depth}, component=[${componentNodes.join(', ')}]`);
-  });
-
-  return lines.join('\n');
-}
-
-// ═══════════════════════════════════════════════════════
-// EXPORTS
-// ═══════════════════════════════════════════════════════
 
 module.exports = {
   buildAdjacencyList,
-  detectCycles,
   findConnectedComponents,
+  detectCyclesPerComponent,
   identifyRoots,
-  buildTree,
-  buildTrees,
-  calculateDepth,
+  buildHierarchies,
   generateSummary,
 };

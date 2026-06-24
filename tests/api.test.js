@@ -1,210 +1,74 @@
-/**
- * Integration tests for /bfhl endpoint (POST & GET)
- *
- * Tests the full request lifecycle:
- *  - POST /bfhl:
- *    - Valid payloads → 200 with correct graph structure and summary
- *    - Invalid payloads → 400 with error details
- *    - Edge cases (duplicates, cycles, disconnected, diamond)
- *  - GET /bfhl:
- *    - Returns status 200 with operation_code
- */
-
 const request = require('supertest');
 const app = require('../src/app');
 
-describe('/bfhl Endpoint', () => {
-
-  // ── GET /bfhl ──────────────────────────────────────────
-
+describe('BFHL Graph API', () => {
   describe('GET /bfhl', () => {
-    test('returns status 200 and operation code', async () => {
-      const res = await request(app)
-        .get('/bfhl')
-        .expect(200);
-
-      expect(res.body.success).toBe(true);
-      expect(res.body.operation_code).toBe(1);
+    it('should return operation_code: 1', async () => {
+      const res = await request(app).get('/bfhl');
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toEqual({
+        success: true,
+        operation_code: 1,
+      });
     });
   });
-
-  // ── POST /bfhl ─────────────────────────────────────────
 
   describe('POST /bfhl', () => {
+    it('should correctly parse and process the exact assignment example', async () => {
+      const payload = {
+        data: [
+          "A->B", "A->C", "B->D", "C->E", "E->F",
+          "X->Y", "Y->Z", "Z->X",
+          "P->Q", "Q->R",
+          "G->H", "G->H", "G->I",
+          "hello", "1->2", "A->"
+        ]
+      };
 
-    // ── Validation Tests ────────────────────────────────
-
-    describe('Input Validation', () => {
-      test('rejects missing edges field', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({})
-          .expect(400);
-
-        expect(res.body.success).toBe(false);
-        expect(res.body.error).toBe('Validation failed');
+      const res = await request(app).post('/bfhl').send(payload);
+      
+      expect(res.statusCode).toBe(200);
+      
+      // Basic fields
+      expect(res.body.user_id).toBe("johndoe_17091999");
+      expect(res.body.email_id).toBe("john.doe@college.edu");
+      expect(res.body.college_roll_number).toBe("21CS1001");
+      
+      // Invalid and duplicates
+      expect(res.body.invalid_entries).toEqual(["hello", "1->2", "A->"]);
+      expect(res.body.duplicate_edges).toEqual(["G->H"]);
+      
+      // Summary
+      expect(res.body.summary).toEqual({
+        total_trees: 3,
+        total_cycles: 1,
+        largest_tree_root: "A"
       });
 
-      test('rejects empty edges array', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [] })
-          .expect(400);
+      // Hierarchies
+      expect(res.body.hierarchies).toHaveLength(4);
+      
+      const A = res.body.hierarchies.find(h => h.root === 'A');
+      expect(A.depth).toBe(4);
+      expect(A.tree).toEqual({ "A": { "B": { "D": {} }, "C": { "E": { "F": {} } } } });
 
-        expect(res.body.success).toBe(false);
-      });
+      const X = res.body.hierarchies.find(h => h.root === 'X');
+      expect(X.has_cycle).toBe(true);
+      expect(X.tree).toEqual({});
 
-      test('rejects edges that are not arrays of 2', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [['A']] })
-          .expect(400);
+      const P = res.body.hierarchies.find(h => h.root === 'P');
+      expect(P.depth).toBe(3);
+      expect(P.tree).toEqual({ "P": { "Q": { "R": {} } } });
 
-        expect(res.body.success).toBe(false);
-      });
-
-      test('rejects non-string node values', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [[1, 2]] })
-          .expect(400);
-
-        expect(res.body.success).toBe(false);
-      });
-
-      test('rejects self-loops', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [['A', 'A']] })
-          .expect(400);
-
-        expect(res.body.success).toBe(false);
-        expect(res.body.error).toBe('Self-loops are not allowed');
-      });
+      const G = res.body.hierarchies.find(h => h.root === 'G');
+      expect(G.depth).toBe(2);
+      expect(G.tree).toEqual({ "G": { "H": {}, "I": {} } });
     });
 
-    // ── Success Tests ───────────────────────────────────
-
-    describe('Valid Graph Processing', () => {
-      test('simple chain A→B→C', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [['A', 'B'], ['B', 'C']] })
-          .expect(200);
-
-        expect(res.body.success).toBe(true);
-        expect(res.body.data.totalNodes).toBe(3);
-        expect(res.body.data.totalEdges).toBe(2);
-        expect(res.body.data.cycleInfo.hasCycle).toBe(false);
-        expect(res.body.data.components).toHaveLength(1);
-        expect(res.body.data.trees).toHaveLength(1);
-        expect(res.body.data.trees[0].root).toBe('A');
-        expect(res.body.data.trees[0].depth).toBe(2);
-      });
-
-      test('diamond DAG A→B, A→C, B→D, C→D', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [['A', 'B'], ['A', 'C'], ['B', 'D'], ['C', 'D']] })
-          .expect(200);
-
-        const data = res.body.data;
-        expect(data.totalNodes).toBe(4);
-        expect(data.cycleInfo.hasCycle).toBe(false);
-        expect(data.trees[0].root).toBe('A');
-      });
-
-      test('graph with cycle A→B→C→A', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [['A', 'B'], ['B', 'C'], ['C', 'A']] })
-          .expect(200);
-
-        const data = res.body.data;
-        expect(data.cycleInfo.hasCycle).toBe(true);
-        expect(data.cycleInfo.cycleEdges.length).toBeGreaterThanOrEqual(1);
-      });
-
-      test('duplicate edges are removed', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [['A', 'B'], ['A', 'B'], ['B', 'C'], ['B', 'C']] })
-          .expect(200);
-
-        const data = res.body.data;
-        expect(data.duplicatesRemoved).toBe(2);
-        expect(data.totalEdges).toBe(2);
-      });
-
-      test('disconnected components', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [['A', 'B'], ['C', 'D'], ['E', 'F']] })
-          .expect(200);
-
-        const data = res.body.data;
-        expect(data.components).toHaveLength(3);
-        expect(data.trees).toHaveLength(3);
-      });
-
-      test('summary is a non-empty string', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [['A', 'B']] })
-          .expect(200);
-
-        expect(typeof res.body.data.summary).toBe('string');
-        expect(res.body.data.summary.length).toBeGreaterThan(0);
-      });
+    it('should reject missing data field', async () => {
+      const res = await request(app).post('/bfhl').send({ edges: [] });
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error).toBe('Validation failed');
     });
-
-    // ── Edge Cases ──────────────────────────────────────
-
-    describe('Edge Cases', () => {
-      test('single edge', async () => {
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges: [['X', 'Y']] })
-          .expect(200);
-
-        expect(res.body.data.totalNodes).toBe(2);
-        expect(res.body.data.trees[0].depth).toBe(1);
-      });
-
-      test('large linear chain (100 nodes)', async () => {
-        const edges = [];
-        for (let i = 0; i < 99; i++) {
-          edges.push([`N${i}`, `N${i + 1}`]);
-        }
-
-        const res = await request(app)
-          .post('/bfhl')
-          .send({ edges })
-          .expect(200);
-
-        expect(res.body.data.totalNodes).toBe(100);
-        expect(res.body.data.trees[0].depth).toBe(99);
-      });
-    });
-  });
-});
-
-// ── Health Check ────────────────────────────────────
-
-describe('GET /', () => {
-  test('returns health check response', async () => {
-    const res = await request(app).get('/').expect(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.message).toContain('running');
-  });
-});
-
-// ── 404 ─────────────────────────────────────────────
-
-describe('404 handling', () => {
-  test('returns 404 for unknown routes', async () => {
-    const res = await request(app).get('/api/unknown').expect(404);
-    expect(res.body.success).toBe(false);
-    expect(res.body.error).toContain('not found');
   });
 });

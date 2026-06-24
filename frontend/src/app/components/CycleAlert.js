@@ -1,54 +1,28 @@
-"use client";
-
-/**
- * CycleAlert — displays cycle detection results prominently.
- *
- * Shows a success banner when no cycles are found, or a
- * warning banner listing all cycle-forming edges.
- *
- * Props:
- *  @param {object} cycleInfo - { hasCycle: boolean, cycleEdges: string[][] }
- */
-
-export default function CycleAlert({ cycleInfo }) {
-  if (!cycleInfo.hasCycle) {
+export default function CycleAlert({ totalCycles }) {
+  if (totalCycles === 0) {
     return (
-      <div className="flex items-center gap-3 p-4 rounded-xl bg-[var(--success-bg)] border border-[var(--success)]/20 animate-fade-in-up">
-        <span className="text-2xl">✅</span>
-        <div>
-          <p className="text-sm font-semibold text-[var(--success)]">
-            No Cycles Detected
-          </p>
-          <p className="text-xs text-[var(--foreground-muted)] mt-0.5">
-            The graph is a valid DAG (Directed Acyclic Graph)
-          </p>
-        </div>
+      <div className="panel p-4 border-l-4 border-l-[var(--success)] flex items-center justify-between">
+        <span className="text-xs font-bold text-[var(--success)] uppercase tracking-widest">
+          System Check OK: Graph is a valid DAG
+        </span>
+        <span className="badge badge-success">No Cycles</span>
       </div>
     );
   }
 
   return (
-    <div className="p-4 rounded-xl bg-[var(--warning-bg)] border border-[var(--warning)]/20 animate-fade-in-up space-y-3">
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">⚠️</span>
-        <div>
-          <p className="text-sm font-semibold text-[var(--warning)]">
-            Cycles Detected
-          </p>
-          <p className="text-xs text-[var(--foreground-muted)] mt-0.5">
-            {cycleInfo.cycleEdges.length} back-edge
-            {cycleInfo.cycleEdges.length !== 1 ? "s" : ""} found forming
-            cycle(s)
-          </p>
-        </div>
+    <div className="panel p-4 border-l-4 border-l-[var(--warning)] flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-[var(--warning)] uppercase tracking-widest">
+          Warning: Cycle Detected
+        </span>
+        <span className="badge badge-warning">
+          Count: {String(totalCycles).padStart(2, '0')}
+        </span>
       </div>
-      <div className="flex flex-wrap gap-2 ml-9">
-        {cycleInfo.cycleEdges.map(([from, to], i) => (
-          <span key={i} className="badge badge-warning font-mono">
-            {from} → {to}
-          </span>
-        ))}
-      </div>
+      <p className="text-[10px] text-[var(--foreground-muted)] uppercase tracking-widest mt-2">
+        Cycle structures cannot form valid trees and are isolated.
+      </p>
     </div>
   );
 }

@@ -1,83 +1,44 @@
-/**
- * Graph processing service — orchestrator layer.
- *
- * Takes raw edges from the controller, runs the full analysis pipeline,
- * and returns a structured result object. The controller never calls
- * utility functions directly.
- */
-
 const {
   buildAdjacencyList,
-  detectCycles,
   findConnectedComponents,
+  detectCyclesPerComponent,
   identifyRoots,
-  buildTrees,
-  calculateDepth,
+  buildHierarchies,
   generateSummary,
 } = require('../utils/graphUtils');
 
-/**
- * Process a set of directed edges through the full graph analysis pipeline.
- *
- * Pipeline:
- *  1. Build adjacency list (with deduplication)
- *  2. Detect cycles
- *  3. Find connected components
- *  4. Identify roots per component
- *  5. Build trees from roots
- *  6. Calculate depths
- *  7. Generate human-readable summary
- *
- * @param {string[][]} edges - Raw edges from the request body
- * @returns {object} Complete analysis result
- */
-function processGraph(edges) {
-  // Step 1 — Adjacency list
-  const { adjacencyList, nodes, dedupedEdges } = buildAdjacencyList(edges);
+function processGraph(validEdges, invalid_entries) {
+  // Step 1 — Adjacency list and duplicate detection
+  const { adjacencyList, nodes, dedupedEdges, duplicate_edges } = buildAdjacencyList(validEdges);
 
-  // Step 2 — Cycle detection
-  const cycleInfo = detectCycles(adjacencyList, nodes);
-
-  // Step 3 — Connected components
+  // Step 2 — Connected components
   const components = findConnectedComponents(dedupedEdges, nodes);
+
+  // Step 3 — Cycle detection per component
+  const { componentCycles, totalCycles } = detectCyclesPerComponent(adjacencyList, components);
 
   // Step 4 — Root identification
   const componentRoots = identifyRoots(adjacencyList, components);
 
-  // Step 5 — Tree construction
-  const trees = buildTrees(componentRoots, adjacencyList, components);
-
-  // Step 6 — Depth calculation
-  const depths = calculateDepth(trees);
-
-  // Step 7 — Summary
-  const summary = generateSummary({
+  // Step 5 — Build hierarchies (trees or cycles)
+  const { hierarchies, totalTrees, largestTreeRoot } = buildHierarchies(
+    componentRoots,
+    adjacencyList,
     components,
-    trees,
-    cycleInfo,
-    totalNodes: nodes.size,
-    totalEdges: dedupedEdges.length,
-  });
+    componentCycles
+  );
+
+  // Step 6 — Summary
+  const summary = generateSummary(totalTrees, totalCycles, largestTreeRoot);
 
   return {
-    totalNodes: nodes.size,
-    totalEdges: dedupedEdges.length,
-    duplicatesRemoved: edges.length - dedupedEdges.length,
-    adjacencyList: Object.fromEntries(adjacencyList),
-    cycleInfo: {
-      hasCycle: cycleInfo.hasCycle,
-      cycleEdges: cycleInfo.cycleEdges,
-    },
-    components,
-    roots: Object.fromEntries(componentRoots),
-    trees: trees.map(({ root, tree, depth, componentNodes }) => ({
-      root,
-      depth,
-      componentNodes,
-      tree,
-    })),
-    depths,
-    summary,
+    user_id: "johndoe_17091999",
+    email_id: "john.doe@college.edu",
+    college_roll_number: "21CS1001",
+    hierarchies,
+    invalid_entries,
+    duplicate_edges,
+    summary
   };
 }
 

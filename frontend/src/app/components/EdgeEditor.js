@@ -2,22 +2,14 @@
 
 /**
  * EdgeEditor — form to add/remove graph edges with Interactive Form and Raw Text modes.
- *
- * Props:
- *  @param {string[][]} edges - Current edges array
- *  @param {function} setEdges - State setter
- *  @param {function} onSubmit - Called when user clicks Process
- *  @param {boolean} loading - Disables form during API call
  */
 
 import { useState } from "react";
 
-// Robust parser helper
 const parseRawEdges = (text) => {
   const trimmed = text.trim();
   if (!trimmed) return [];
 
-  // Try parsing JSON format
   if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
     try {
       const parsedJson = JSON.parse(trimmed);
@@ -34,12 +26,9 @@ const parseRawEdges = (text) => {
       if (validEdges.length > 0) {
         return validEdges.map(([from, to]) => [from.trim(), to.trim()]);
       }
-    } catch (e) {
-      // Fallback if JSON parsing fails
-    }
+    } catch (e) {}
   }
 
-  // Fallback parser: split by newlines or commas
   const lines = text.split(/[\n,]+/);
   const parsed = [];
   for (let line of lines) {
@@ -68,7 +57,6 @@ const parseRawEdges = (text) => {
   return parsed;
 };
 
-// Convert edges array back to raw text representation
 const edgesToText = (edgeArray) => {
   return edgeArray
     .filter(([from, to]) => from || to)
@@ -77,7 +65,7 @@ const edgesToText = (edgeArray) => {
 };
 
 export default function EdgeEditor({ edges, setEdges, onSubmit, loading }) {
-  const [inputMode, setInputMode] = useState("form"); // "form" | "text"
+  const [inputMode, setInputMode] = useState("form");
   const [rawText, setRawText] = useState("");
 
   const addEdge = () => setEdges([...edges, ["", ""]]);
@@ -116,14 +104,8 @@ export default function EdgeEditor({ edges, setEdges, onSubmit, loading }) {
 
   const loadExample = () => {
     const exampleEdges = [
-      ["A", "B"],
-      ["A", "C"],
-      ["B", "D"],
-      ["C", "D"],
-      ["D", "E"],
-      ["F", "G"],
-      ["G", "H"],
-      ["H", "F"],
+      ["A", "B"], ["A", "C"], ["B", "D"], ["C", "D"],
+      ["D", "E"], ["F", "G"], ["G", "H"], ["H", "F"],
     ];
     setEdges(exampleEdges);
     setRawText(edgesToText(exampleEdges));
@@ -137,79 +119,75 @@ export default function EdgeEditor({ edges, setEdges, onSubmit, loading }) {
   const validEdgesCount = edges.filter(([f, t]) => f.trim() && t.trim()).length;
 
   return (
-    <form onSubmit={handleSubmit} className="glass-card p-6 space-y-5">
+    <form onSubmit={handleSubmit} className="panel p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between border-b border-[var(--border)] pb-4">
         <div>
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Edge Editor
+          <h2 className="text-sm font-bold text-[var(--foreground)] uppercase tracking-widest">
+            Edge Configuration
           </h2>
-          <p className="text-sm text-[var(--foreground-muted)] mt-1">
-            Specify the directed node list and relationships
+          <p className="text-[10px] text-[var(--foreground-muted)] uppercase mt-1">
+            Specify network topology
           </p>
         </div>
         <button
           type="button"
           onClick={loadExample}
-          className="btn-secondary text-xs"
+          className="btn-secondary"
         >
-          ✨ Load Example
+          Load Example
         </button>
       </div>
 
       {/* Input Mode Toggle */}
-      <div className="flex bg-[var(--surface)] p-1 rounded-lg border border-[var(--border)] text-xs">
+      <div className="flex bg-[var(--background)] border border-[var(--border)] p-1">
         <button
           type="button"
           onClick={() => handleModeChange("form")}
-          className={`flex-1 py-1.5 rounded-md font-medium transition-all ${
+          className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
             inputMode === "form"
-              ? "bg-[var(--accent)] text-white shadow-sm"
+              ? "bg-[var(--foreground)] text-[var(--background)]"
               : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
           }`}
         >
-          📝 Interactive Form
+          Form Input
         </button>
         <button
           type="button"
           onClick={() => handleModeChange("text")}
-          className={`flex-1 py-1.5 rounded-md font-medium transition-all ${
+          className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors ${
             inputMode === "text"
-              ? "bg-[var(--accent)] text-white shadow-sm"
+              ? "bg-[var(--foreground)] text-[var(--background)]"
               : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
           }`}
         >
-          💻 Raw Text Area
+          Raw Text
         </button>
       </div>
 
       {/* Editor Content Area */}
       {inputMode === "form" ? (
-        <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-[320px] overflow-y-auto pr-2">
           {edges.map((edge, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 animate-fade-in"
-              style={{ animationDelay: `${i * 10}ms` }}
-            >
-              <span className="text-xs text-[var(--foreground-dim)] w-6 text-right font-mono">
-                {i + 1}
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-[10px] text-[var(--foreground-dim)] w-6 text-right font-mono">
+                {String(i + 1).padStart(2, '0')}
               </span>
               <input
                 type="text"
                 className="input-field flex-1"
-                placeholder="From node"
+                placeholder="Source"
                 value={edge[0]}
                 onChange={(e) => updateEdge(i, 0, e.target.value)}
                 required
               />
-              <span className="text-[var(--accent-light)] text-lg select-none">
-                →
+              <span className="text-[var(--foreground-dim)] text-xs px-2">
+                {"->"}
               </span>
               <input
                 type="text"
                 className="input-field flex-1"
-                placeholder="To node"
+                placeholder="Destination"
                 value={edge[1]}
                 onChange={(e) => updateEdge(i, 1, e.target.value)}
                 required
@@ -217,11 +195,11 @@ export default function EdgeEditor({ edges, setEdges, onSubmit, loading }) {
               <button
                 type="button"
                 onClick={() => removeEdge(i)}
-                className="btn-danger px-2.5 py-1.5 text-xs"
+                className="btn-danger w-8 h-8 flex items-center justify-center p-0"
                 title="Remove edge"
                 disabled={edges.length <= 1}
               >
-                ✕
+                X
               </button>
             </div>
           ))}
@@ -229,8 +207,8 @@ export default function EdgeEditor({ edges, setEdges, onSubmit, loading }) {
       ) : (
         <div className="space-y-2">
           <textarea
-            className="input-field w-full h-[320px] font-mono text-xs p-3 resize-none bg-[var(--surface-dark)]/50 border-[var(--border)] focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
-            placeholder={`Enter edges here. Supported formats:\n1. Arrow: A -> B\n2. Hyphen: A-B\n3. Space: A B\n4. JSON: [["A","B"], ["B","C"]]\n\nOne edge per line or comma-separated.`}
+            className="input-field w-full h-[320px] resize-none"
+            placeholder={`A -> B\nA-B\nA B\n[["A","B"]]`}
             value={rawText}
             onChange={(e) => handleTextChange(e.target.value)}
             disabled={loading}
@@ -239,31 +217,26 @@ export default function EdgeEditor({ edges, setEdges, onSubmit, loading }) {
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-3 pt-2 border-t border-[var(--border)]">
-        {inputMode === "form" && (
+      <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-[var(--border)]">
+        {inputMode === "form" ? (
           <button
             type="button"
             onClick={addEdge}
-            className="btn-secondary flex items-center gap-1.5"
+            className="btn-secondary whitespace-nowrap"
             disabled={loading}
           >
-            <span className="text-[var(--accent-light)]">+</span> Add Edge
+            + Add Edge
           </button>
-        )}
-        <div className="flex-1" />
-        <span className="text-xs text-[var(--foreground-dim)] font-mono">
-          {validEdgesCount} parsed edge{validEdgesCount !== 1 ? "s" : ""}
-        </span>
-        <button type="submit" className="btn-primary" disabled={loading}>
-          {loading ? (
-            <span className="flex items-center gap-2">
-              <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin-slow" />
-              Processing…
-            </span>
-          ) : (
-            "🚀 Process Graph"
-          )}
-        </button>
+        ) : <div/>}
+        
+        <div className="flex items-center gap-3 ml-auto">
+          <span className="text-[10px] text-[var(--foreground-dim)] font-mono uppercase tracking-widest whitespace-nowrap">
+            Parsed: {String(validEdgesCount).padStart(2, '0')}
+          </span>
+          <button type="submit" className="btn-primary whitespace-nowrap" disabled={loading}>
+            {loading ? "Processing..." : "Process Graph"}
+          </button>
+        </div>
       </div>
     </form>
   );

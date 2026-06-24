@@ -20,11 +20,7 @@ const app = express();
 app.use(helmet());
 
 // ── CORS ────────────────────────────────────────────────
-app.use(cors({
-  origin: config.corsOrigin,
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type'],
-}));
+app.use(cors());
 
 // ── Body parsing ────────────────────────────────────────
 app.use(express.json({ limit: '1mb' }));
