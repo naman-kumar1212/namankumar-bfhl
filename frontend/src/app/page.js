@@ -57,22 +57,11 @@ export default function Home() {
     }
   }, [result]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (payloadData) => {
     setError(null);
     setResult(null);
 
-    const cleaned = edges
-      .map(([from, to]) => {
-        const f = from.trim();
-        const t = to.trim();
-        if (!f && !t) return null;
-        if (!f) return `->${t}`;
-        if (!t) return `${f}->`;
-        return `${f}->${t}`;
-      })
-      .filter(Boolean);
-
-    if (cleaned.length === 0) {
+    if (!payloadData || payloadData.length === 0) {
       setError("Please add at least one valid edge.");
       return;
     }
@@ -88,7 +77,7 @@ export default function Home() {
       const res = await fetch(`${baseUrl}/bfhl`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: cleaned }),
+        body: JSON.stringify({ data: payloadData }),
       });
 
       const json = await res.json();

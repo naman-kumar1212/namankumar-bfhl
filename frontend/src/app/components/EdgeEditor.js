@@ -103,17 +103,63 @@ export default function EdgeEditor({ edges, setEdges, onSubmit, loading }) {
   };
 
   const loadExample = () => {
-    const exampleEdges = [
-      ["A", "B"], ["A", "C"], ["B", "D"], ["C", "D"],
-      ["D", "E"], ["F", "G"], ["G", "H"], ["H", "F"],
-    ];
-    setEdges(exampleEdges);
-    setRawText(edgesToText(exampleEdges));
+    const rawExample = [
+      "A->B", "A->C", "B->D", "C->E", "E->F",
+      "X->Y", "Y->Z", "Z->X",
+      "P->Q", "Q->R",
+      "G->H", "G->H", "G->I",
+      "hello", "1->2", "A->"
+    ].join("\\n");
+    
+    setInputMode("text");
+    setRawText(rawExample);
+    
+    const parsed = parseRawEdges(rawExample);
+    if (parsed.length > 0) {
+      setEdges(parsed);
+    } else {
+      setEdges([["", ""]]);
+    }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit();
+    if (inputMode === "text") {
+      let data = [];
+      const trimmed = rawText.trim();
+      
+      if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+        try {
+           const parsedJson = JSON.parse(trimmed);
+           if (Array.isArray(parsedJson)) data = parsedJson;
+           else if (parsedJson && Array.isArray(parsedJson.data)) data = parsedJson.data;
+           else if (parsedJson && Array.isArray(parsedJson.edges)) data = parsedJson.edges;
+           
+           if (data.length > 0 && typeof data[0] === 'string') {
+              onSubmit(data);
+              return;
+           }
+        } catch(err) {}
+      }
+      
+      data = rawText.split(/[\\n,]+/).map(s => {
+        let str = s.trim();
+        str = str.replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+        return str;
+      }).filter(Boolean);
+      
+      onSubmit(data);
+    } else {
+      const data = edges.map(([f, t]) => {
+        const from = f.trim();
+        const to = t.trim();
+        if (!from && !to) return null;
+        if (!from) return `->${to}`;
+        if (!to) return `${from}->`;
+        return `${from}->${to}`;
+      }).filter(Boolean);
+      onSubmit(data);
+    }
   };
 
   const validEdgesCount = edges.filter(([f, t]) => f.trim() && t.trim()).length;
