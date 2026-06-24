@@ -8,7 +8,7 @@
 const app = require('./src/app');
 const config = require('./src/config');
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`
   ┌──────────────────────────────────────────┐
   │  BFHL Graph API                          │
@@ -17,6 +17,15 @@ const server = app.listen(config.port, () => {
   │  CORS Origin : ${config.corsOrigin.padEnd(24)}│
   └──────────────────────────────────────────┘
   `);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.info('SIGTERM signal received. Closing HTTP server.');
+  server.close(() => {
+    console.log('HTTP server closed.');
+    process.exit(0);
+  });
 });
 
 module.exports = server;
