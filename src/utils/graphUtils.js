@@ -89,7 +89,6 @@ function findConnectedComponents(edges, nodes) {
     components.push(members.sort());
   }
 
-  components.sort((a, b) => a[0].localeCompare(b[0]));
   return components;
 }
 
