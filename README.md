@@ -35,7 +35,7 @@ flowchart TD
     
     UI -->|Raw text / form edges| Parser
     Parser -->|State update| UI
-    UI -->|POST /bfhl (JSON)| Router
+    UI -->|"POST /bfhl (JSON)"| Router
     Router -->|Check format & self-loops| Validator
     Validator -->|Validated edges| Service
     
