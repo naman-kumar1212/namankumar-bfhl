@@ -11,14 +11,14 @@ The project is split into a **Next.js Single Page Application (SPA)** and a **No
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Next.js Frontend (Port 3001)"]
+    subgraph Client ["Next.js Frontend (Port 3000)"]
         UI["Interactive Dashboard (React)"]
         Parser["Input Parsing Engine"]
         TreeViz["Hierarchical Tree Viewer"]
         Stats["Metrics Panel"]
     end
     
-    subgraph Server ["Express.js Backend (Port 3000)"]
+    subgraph Server ["Express.js Backend (Port 8080)"]
         Router["API Router (/bfhl)"]
         Validator["Input Validation Middleware"]
         Service["Graph Orchestration Service"]
@@ -97,64 +97,64 @@ The backend exposes a single, high-performance endpoint at `/bfhl` supporting CO
 - **Request Body:**
 ```json
 {
-  "edges": [
-    ["A", "B"],
-    ["A", "C"],
-    ["B", "D"],
-    ["C", "D"]
+  "data": [
+    "A->B", "A->C", "B->D", "C->E", "E->F",
+    "X->Y", "Y->Z", "Z->X",
+    "P->Q", "Q->R",
+    "G->H", "G->H", "G->I",
+    "hello", "1->2", "A->"
   ]
 }
 ```
 - **Response (200 OK):**
 ```json
 {
-  "success": true,
-  "data": {
-    "adjacencyList": {
-      "A": ["B", "C"],
-      "B": ["D"],
-      "C": ["D"],
-      "D": []
-    },
-    "totalNodes": 4,
-    "totalEdges": 4,
-    "duplicatesRemoved": 0,
-    "cycleInfo": {
-      "hasCycle": false,
-      "cycleEdges": []
-    },
-    "components": [["A", "B", "C", "D"]],
-    "trees": [
-      {
-        "root": "A",
-        "depth": 2,
-        "structure": {
-          "node": "A",
-          "children": [
-            {
-              "node": "B",
-              "children": [
-                {
-                  "node": "D",
-                  "children": []
-                }
-              ]
-            },
-            {
-              "node": "C",
-              "children": [
-                {
-                  "node": "D",
-                  "children": [],
-                  "cycleBackRef": "D"
-                }
-              ]
-            }
-          ]
+  "user_id": "naman_kumar_1212",
+  "email_id": "naman@example.com",
+  "college_roll_number": "123456",
+  "hierarchies": [
+    {
+      "root": "A",
+      "tree": {
+        "A": {
+          "B": { "D": {} },
+          "C": { "E": { "F": {} } }
         }
-      }
-    ],
-    "summary": "Graph has 4 nodes and 4 edges. 1 connected component(s). No cycles detected."
+      },
+      "depth": 4
+    },
+    {
+      "root": "X",
+      "tree": {},
+      "has_cycle": true
+    },
+    {
+      "root": "P",
+      "tree": {
+        "P": { "Q": { "R": {} } }
+      },
+      "depth": 3
+    },
+    {
+      "root": "G",
+      "tree": {
+        "G": { "H": {}, "I": {} }
+      },
+      "depth": 2
+    }
+  ],
+  "invalid_entries": [
+    "hello",
+    "1->2",
+    "A->"
+  ],
+  "duplicate_edges": [
+    "G->H"
+  ],
+  "summary": {
+    "total_trees": 3,
+    "total_cycles": 1,
+    "largest_tree_root": "A"
   }
 }
 ```
@@ -175,15 +175,12 @@ The backend exposes a single, high-performance endpoint at `/bfhl` supporting CO
 ## 🎨 Frontend Features & Working
 
 The frontend app is a single-page dashboard built using Next.js, featuring:
-1. **Interactive Form Input:** Add individual edge pairs (`from` and `to` inputs) with validation.
-2. **Raw Text Area Input:** Paste raw lists of edges in various popular formats:
-   - Arrow notation: `A -> B`
-   - Hyphen notation: `A-B`
-   - Space delimited: `A B`
-   - Raw JSON arrays: `[["A", "B"], ["B", "C"]]`
-3. **Live Stats Dashboard:** Displays metrics such as node count, edge count, disconnected groups, and filtered duplicate counts.
-4. **Recursive Tree Viewer:** Interactive tree hierarchies showing collapsible children, cycle indicators, and maximum path depths.
-5. **Detailed Error Banner:** Catches validation failures (e.g., self-loops, incorrect formats) and returns error descriptions.
+1. **Industrial Utilitarian Design:** A stark, high-contrast monochrome aesthetic utilizing monospace typography, 1px structural borders, and Deep Blacks/Stark White accents.
+2. **Kinetic Motion Engine:** Deep integration of Anime.js for complex, staggered, physics-based (spring) animations across page loads and component mounting.
+3. **Interactive Form Input:** Add individual edge pairs (`from` and `to` inputs) with validation.
+4. **Raw Text Area Input:** Paste raw lists of edges in various formats (`A->B`).
+5. **Live Stats Dashboard:** Displays metrics such as total valid trees, duplicate edges, and invalid entries.
+6. **Recursive Tree Viewer:** Interactive JSON tree rendering to visualize hierarchies natively.
 
 ---
 
@@ -204,20 +201,20 @@ The frontend app is a single-page dashboard built using Next.js, featuring:
    npm install
    npm run dev
    ```
-   The API will start on `http://localhost:3000`.
+   The API will start on `http://localhost:8080`.
 
 ### 2. Frontend App Setup
 1. Go to the `/frontend` directory.
 2. Create your environment config file `.env.local`:
    ```env
-   NEXT_PUBLIC_API_URL=http://localhost:3000
+   NEXT_PUBLIC_API_URL=http://localhost:8080
    ```
 3. Install dependencies and start server:
    ```bash
    npm install
    npm run dev
    ```
-   The client dashboard will run on `http://localhost:3001`.
+   The client dashboard will run on `http://localhost:3000`.
 
 ### 3. Running Tests
 Run the Jest test suite from the project root:
