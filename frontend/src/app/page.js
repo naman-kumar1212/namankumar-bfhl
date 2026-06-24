@@ -49,7 +49,10 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/bfhl`, {
+      // Safely strip any trailing slash the user might have accidentally added to NEXT_PUBLIC_API_URL
+      const baseUrl = API_URL.replace(/\/+$/, "");
+      
+      const res = await fetch(`${baseUrl}/bfhl`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ edges: cleaned }),
