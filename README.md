@@ -1,91 +1,133 @@
-# Chitkara Full Stack Engineering Challenge — Graph Analyzer & API
+# 🌳 BFHL Graph Processing System & Dashboard
+### Chitkara Full Stack Engineering Challenge
 
-A high-performance, premium single-page web application and REST API for parsing, analyzing, and visualizing directed graphs. Built as a response to the Chitkara Full Stack Engineering Challenge.
-
----
-
-## 🚀 Live Demos
-- **Backend API**: Hosted on **Render** (e.g., `https://bfhl-graph-api.onrender.com`)
-- **Frontend App**: Hosted on **Vercel** (e.g., `https://bfhl-graph-analyzer.vercel.app`)
+A production-grade, full-stack application designed to parse, deduplicate, validate, and analyze directed graphs. The system decomposes complex directed graphs into their constituent connected components, detects cyclic loops, selects appropriate component roots, and builds tree hierarchies returned as structured JSON.
 
 ---
 
-## 🏛️ Architecture & Folder Structure
+## 🏛️ System Architecture
 
-The project maintains a strict clean architecture separated into distinct layers:
+The project is split into a **Next.js Single Page Application (SPA)** and a **Node.js/Express.js REST API**, utilizing clean, decoupled architecture:
 
+```mermaid
+flowchart TD
+    subgraph Client ["Next.js Frontend (Port 3001)"]
+        UI["Interactive Dashboard (React)"]
+        Parser["Input Parsing Engine"]
+        TreeViz["Hierarchical Tree Viewer"]
+        Stats["Metrics Panel"]
+    end
+    
+    subgraph Server ["Express.js Backend (Port 3000)"]
+        Router["API Router (/bfhl)"]
+        Validator["Input Validation Middleware"]
+        Service["Graph Orchestration Service"]
+        
+        subgraph Engine ["Graph processing Engine (Pure Functions)"]
+            Adj["buildAdjacencyList (Deduplication)"]
+            UF["findConnectedComponents (Union-Find)"]
+            DFS_C["detectCycles (3-Color DFS)"]
+            Root["identifyRoots (In-Degree Zero / Lexicographical)"]
+            Tree["buildTrees (Hierarchical DFS)"]
+            Summ["generateSummary"]
+        end
+    end
+    
+    UI -->|Raw text / form edges| Parser
+    Parser -->|State update| UI
+    UI -->|POST /bfhl (JSON)| Router
+    Router -->|Check format & self-loops| Validator
+    Validator -->|Validated edges| Service
+    
+    Service -->|1. Deduplicate| Adj
+    Service -->|2. Extract groups| UF
+    Service -->|3. Detect loops| DFS_C
+    Service -->|4. Find entry points| Root
+    Service -->|5. Build hierarchies| Tree
+    Service -->|6. Generate string| Summ
+    
+    Engine -->|Processed Graph Data| Service
+    Service -->|200 OK JSON| UI
+    UI -->|Hydrate state| TreeViz
+    UI -->|Render metrics| Stats
 ```
-bfhl-api/
-├── server.js                   # Main entry point (loads env & starts HTTP server)
-├── render.yaml                 # Infrastructure configuration for Render
-├── package.json                # Project dependencies and run scripts
-├── src/
-│   ├── app.js                  # Express app factory (helmet, CORS, routes setup)
-│   ├── config/                 # Environment variables config mapping
-│   ├── middleware/             # Express middleware (centralized error handler)
-│   ├── controllers/            # Controller layer (handles req/res flow control)
-│   ├── routes/                 # Routing layer (exposes HTTP endpoints)
-│   ├── services/               # Orchestrates graph algorithm steps
-│   └── utils/
-│       ├── graphUtils.js       # Pure graph processing & algorithm functions
-│       └── validators.js       # express-validator schemas & self-loop checkers
-├── tests/
-│   ├── api.test.js             # Integration tests for /bfhl endpoints (34/34 passing)
-│   └── graphUtils.test.js      # Unit tests for graph algorithms
-└── frontend/                   # Next.js + Tailwind React SPA
-    ├── src/
-    │   ├── app/
-    │   │   ├── page.js         # Single-page interface & API client state
-    │   │   ├── globals.css     # Premium dark theme and animations stylesheet
-    │   │   └── components/     # Modulized UI parts (TreeView, EdgeEditor, etc.)
-    └── package.json
-```
 
 ---
 
-## ⚡ API Endpoint Reference
+## ⚡ How the Graph Processing Engine Works
+
+The core of the application lies in `src/utils/graphUtils.js`. It executes 7 major phases sequentially:
+
+### 1. Adjacency List Construction & Deduplication
+- **Method:** `buildAdjacencyList(edges)`
+- **Behavior:** Receives raw coordinate arrays `[from, to]` and filters duplicates (e.g. if `A -> B` is submitted twice, it's processed once). Self-loops are caught at the validator middleware layer prior to this step.
+
+### 2. Connected Component Grouping (Union-Find)
+- **Method:** `findConnectedComponents(nodes, edges)`
+- **Behavior:** Operates on an *undirected* view of the graph using a Union-Find (Disjoint-Set) data structure with path compression. This partitions the graph into independent disconnected subgraphs (components) so they can be structured into trees separately.
+
+### 3. Loop and Cycle Detection (3-Color DFS)
+- **Method:** `detectCycles(adjList)`
+- **Behavior:** Uses a depth-first search with 3-state coloring to detect back-edges:
+  - `WHITE (0)`: Unvisited node.
+  - `GRAY (1)`: Under active recursion stack. Encountering a gray node indicates a back-edge (cycle).
+  - `BLACK (2)`: Visited and exited.
+  This prevents false-positive cycle reports on cross-edges (such as in Diamond configurations).
+
+### 4. Root Identification
+- **Method:** `identifyRoots(nodes, inDegrees)`
+- **Behavior:**
+  - Nodes with an in-degree of `0` are selected as roots.
+  - If a component is a **pure cycle** (e.g., `A -> B -> C -> A`), no node has an in-degree of `0`. In this case, the engine automatically selects the **lexicographically smallest node** (alphabetically first) to act as the tree root.
+
+### 5. Tree Hierarchy Reconstruction
+- **Method:** `buildTree(node, adj, visited, componentNodes)`
+- **Behavior:** Performs a DFS traversal from each selected root. If a node points to a child that has already been visited *within the current component recursion*, it marks that relationship with a `cycleBackRef` property instead of recursing further, preventing infinite loops.
+
+---
+
+## 🛠️ API Reference
+
+The backend exposes a single, high-performance endpoint at `/bfhl` supporting CORS.
 
 ### 1. Process Graph Configuration
-Exposes graph processing capabilities. Automatically removes duplicate edges, detects cycles, identifies connected components, extracts root nodes, builds node tree views, calculates tree depths, and outputs a formatted summary.
-
 - **Route:** `/bfhl`
 - **Method:** `POST`
 - **Headers:** `Content-Type: application/json`
-- **Body Example:**
+- **Request Body:**
 ```json
 {
   "edges": [
     ["A", "B"],
-    ["B", "C"],
-    ["C", "D"],
-    ["D", "C"]
+    ["A", "C"],
+    ["B", "D"],
+    ["C", "D"]
   ]
 }
 ```
-
-- **Success Response (200 OK):**
+- **Response (200 OK):**
 ```json
 {
   "success": true,
   "data": {
     "adjacencyList": {
-      "A": ["B"],
-      "B": ["C"],
+      "A": ["B", "C"],
+      "B": ["D"],
       "C": ["D"],
-      "D": ["C"]
+      "D": []
     },
     "totalNodes": 4,
     "totalEdges": 4,
     "duplicatesRemoved": 0,
     "cycleInfo": {
-      "hasCycle": true,
-      "cycleEdges": [["C", "D"], ["D", "C"]]
+      "hasCycle": false,
+      "cycleEdges": []
     },
     "components": [["A", "B", "C", "D"]],
     "trees": [
       {
         "root": "A",
-        "depth": 3,
+        "depth": 2,
         "structure": {
           "node": "A",
           "children": [
@@ -93,14 +135,18 @@ Exposes graph processing capabilities. Automatically removes duplicate edges, de
               "node": "B",
               "children": [
                 {
-                  "node": "C",
-                  "children": [
-                    {
-                      "node": "D",
-                      "children": [],
-                      "cycleBackRef": "C"
-                    }
-                  ]
+                  "node": "D",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "node": "C",
+              "children": [
+                {
+                  "node": "D",
+                  "children": [],
+                  "cycleBackRef": "D"
                 }
               ]
             }
@@ -108,24 +154,15 @@ Exposes graph processing capabilities. Automatically removes duplicate edges, de
         }
       }
     ],
-    "summary": "Graph has 4 nodes and 4 edges. 1 connected component(s). Cycles detected! Cycle edges: C->D, D->C."
+    "summary": "Graph has 4 nodes and 4 edges. 1 connected component(s). No cycles detected."
   }
 }
 ```
 
-- **Error Response (400 Bad Request):**
-```json
-{
-  "success": false,
-  "error": "Self-loops are not allowed"
-}
-```
-
-### 2. Operation Info
-Returns the system operational status code.
+### 2. Operational Info
 - **Route:** `/bfhl`
 - **Method:** `GET`
-- **Response:**
+- **Response (200 OK):**
 ```json
 {
   "success": true,
@@ -135,85 +172,56 @@ Returns the system operational status code.
 
 ---
 
-## 💻 Frontend Features
-1. **Dual Input Methods:**
-   - **Interactive Form:** Add, modify, or remove edges (`from -> to` string fields) on the fly with animated inputs.
-   - **Raw Text Area:** Type or paste relationships directly. Supports arrow-separation (`A -> B`), hyphen-separation (`A-B`), space-separation (`A B`), or direct JSON array format. Real-time parsed output indicator keeps you updated.
-2. **Analysis Summary Dashboard:** Shows metric cards highlighting Node Count, Edge Count, Disconnected Component Count, and Duplicate Edges filtered.
-3. **Interactive Tree Visualizer:** Collapsible tree views representing the resolved hierarchies, featuring indicators for Roots, Leaf nodes, and Cycle-Back-Ref boundaries.
-4. **Diagnostic Warnings:** Active cycle warning banner listing the feedback-loop edge relationships.
+## 🎨 Frontend Features & Working
+
+The frontend app is a single-page dashboard built using Next.js, featuring:
+1. **Interactive Form Input:** Add individual edge pairs (`from` and `to` inputs) with validation.
+2. **Raw Text Area Input:** Paste raw lists of edges in various popular formats:
+   - Arrow notation: `A -> B`
+   - Hyphen notation: `A-B`
+   - Space delimited: `A B`
+   - Raw JSON arrays: `[["A", "B"], ["B", "C"]]`
+3. **Live Stats Dashboard:** Displays metrics such as node count, edge count, disconnected groups, and filtered duplicate counts.
+4. **Recursive Tree Viewer:** Interactive tree hierarchies showing collapsible children, cycle indicators, and maximum path depths.
+5. **Detailed Error Banner:** Catches validation failures (e.g., self-loops, incorrect formats) and returns error descriptions.
 
 ---
 
-## 🛠️ Local Development Setup
+## 🚀 How to Run Locally
 
 ### Prerequisites
 - Node.js (v18+)
 - npm (v9+)
 
-### 1. Clone & Set Up Backend
-1. Go to the project root directory.
-2. Create a `.env` file from the template:
+### 1. Backend Server Setup
+1. Go to the project root.
+2. Setup environment variables:
    ```bash
    cp .env.example .env
    ```
-3. Install dependencies:
+3. Install dependencies and start development server:
    ```bash
    npm install
-   ```
-4. Start the backend developer server:
-   ```bash
    npm run dev
    ```
-   The backend server will run on `http://localhost:3000`.
+   The API will start on `http://localhost:3000`.
 
-### 2. Set Up Frontend
-1. Change directory to `/frontend`.
-2. Create a `.env.local` file:
+### 2. Frontend App Setup
+1. Go to the `/frontend` directory.
+2. Create your environment config file `.env.local`:
    ```env
    NEXT_PUBLIC_API_URL=http://localhost:3000
    ```
-3. Install dependencies:
+3. Install dependencies and start server:
    ```bash
    npm install
-   ```
-4. Start the frontend developer server:
-   ```bash
    npm run dev
    ```
-   The application will boot on `http://localhost:3001` (or next available port).
+   The client dashboard will run on `http://localhost:3001`.
 
----
-
-## 🧪 Testing
-
-The backend includes a comprehensive test suite covering all algorithm edge cases and API routes.
-
+### 3. Running Tests
+Run the Jest test suite from the project root:
 ```bash
-# Run unit & integration tests (34 test cases)
 npm test
 ```
-
-### Key Test Categories
-- **Duplicates Removal:** Deduplicates redundant edges.
-- **Diamond/Multi-Parent DAGs:** Correct parent-child allocations without infinite recursion.
-- **Pure Cycles Root Selection:** Picks the lexicographically smallest node when no standard root is found.
-- **Disconnected Components:** Parses separate graphs concurrently.
-- **Validation constraints:** Rejects self-loops, missing arguments, or type mismatch.
-
----
-
-## 🚀 Deployment Guide
-
-### Deploy Backend to Render
-1. Connect your repository to Render.
-2. Deploy a new **Web Service**.
-3. Render will auto-detect the `render.yaml` configuration at the root and spin up the Express.js service.
-
-### Deploy Frontend to Vercel
-1. Import the repository in Vercel.
-2. Select the `frontend` folder as the Root Directory.
-3. Add the environment variable:
-   - Name: `NEXT_PUBLIC_API_URL`
-   - Value: `<YOUR_RENDER_BACKEND_URL>`
-4. Deploy the project.
+This runs 34 test cases verifying all validation layers, API responses, cycle detection limits, and edge cases.
